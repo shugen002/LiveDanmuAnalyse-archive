@@ -1,0 +1,27 @@
+{
+  "name": "danmuanalyse",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "goimprotocol": "^1.0.2",
+    "lodash.debounce": "^4.0.8",
+    "node-fetch": "^3.3.1"
+  },
+  "overrides": {
+    "goimprotocol": {
+      "ws": "8.13.0"
+    }
+  },
+  "devDependencies": {
+    "@types/lodash.debounce": "^4.0.7",
+    "@types/node": "^20.1.3",
+    "typescript": "^5.0.4"
+  },
+  "type": "module"
+}
