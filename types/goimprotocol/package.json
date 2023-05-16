@@ -1,0 +1,9 @@
+{
+  "name": "goimprotocol",
+  "version": "1.0.2",
+  "description": "goim client for nodejs",
+  "main": "",
+  "types": "index.d.ts",
+  "scripts": {},
+  "dependencies": {}
+}
