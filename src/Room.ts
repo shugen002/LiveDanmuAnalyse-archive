@@ -1,12 +1,26 @@
 import EventEmitter from "events";
 import type { Analyser } from "./Analyser.js";
 import type { BiliApi } from "./BiliApi.js";
-import { GoIMConnection } from 'goimprotocol'
+import { GoIMConnection } from 'goimprotocol/index.js'
 import { inflateSync } from 'zlib';
 
 function sleep(time: number) {
   return new Promise(resolve => setTimeout(resolve, time));
 }
+
+const reconnectQueue: Array<Function> = []
+
+function getReconnectChance(): Promise<void> {
+  return new Promise((resolve, _) => {
+    reconnectQueue.push(resolve)
+  })
+}
+
+const reconnectControllInterval = setInterval(() => {
+  if (reconnectQueue.length > 0) {
+    reconnectQueue.shift().call(null)
+  }
+}, 1000)
 
 export class Room extends EventEmitter {
   id: number;
@@ -74,6 +88,8 @@ export class Room extends EventEmitter {
   async start() {
     while (!this.stoped) {
       await this.connect();
+      await sleep(1000)
+      await getReconnectChance();
     }
   }
   stop() {
