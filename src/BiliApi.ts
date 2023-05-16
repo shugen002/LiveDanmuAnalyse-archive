@@ -90,14 +90,14 @@ export class BiliApi {
     })).json()
   }
 
-  async banUserInRoom(roomId: number, message: any, reason: number) {
+  async banUserInRoom(roomId: number, message: any, hour: number = 8) {
     return (await fetch("https://api.live.bilibili.com/xlive/web-ucenter/v1/banned/AddSilentUser", {
       "headers": this.headers(),
       "body": new URLSearchParams({
         room_id: roomId,
         tuid: message.info[2][0],
         msg: message.info[1],
-        hour: 8,
+        hour,
         mobile_app: "web",
         csrf_token: this.csrf(),
         csrf: this.csrf(),
