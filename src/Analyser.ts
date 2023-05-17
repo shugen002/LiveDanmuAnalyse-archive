@@ -1,12 +1,15 @@
 import EventEmitter from "events";
 const numMap = {
-  "0": "[0oO]",
-  "1": "[1l]",
-  "3": "[3౩꒱]",
-  "6": "[6Ⳓნ]",
-  "7": "(𖩈|[7ꓶ])",
-  "8": "(𐌚|[8ꯕ੪])",
-  "9": "[9୨]"
+  "0": "[0oO零]",
+  "1": "[1l一壹]",
+  "2": "[2二贰]",
+  "3": "[3౩꒱三叁]",
+  "4": "[4四肆]",
+  "5": "[5五伍]",
+  "6": "[6Ⳓნେ六陆]",
+  "7": "(𖩈|[7˥ꓶ七柒])",
+  "8": "(𐌚|[ଃ8ꯕ੪八捌])",
+  "9": "[9୨九玖]"
 }
 
 global.numMap = numMap;
@@ -18,6 +21,7 @@ function pitchEmpty(length, target) {
 export class Analyser extends EventEmitter {
   rule: Array<{ regex: RegExp, weight: number }>
   numMap: { [x: string]: string; };
+  meta: any
   constructor() {
     super()
     this.rule = []

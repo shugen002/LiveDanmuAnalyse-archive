@@ -32,7 +32,8 @@ function getIdStr(b64: string) {
 
 const agent = new Agent({
   keepAlive: true,
-  maxSockets: 10
+  maxSockets: 10,
+  keepAliveMsecs: 65000
 })
 
 export class BiliApi {

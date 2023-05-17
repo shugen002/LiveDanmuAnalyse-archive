@@ -3,15 +3,39 @@ import { Analyser } from './Analyser.js';
 import { BiliApi } from './BiliApi.js';
 import { Room } from './Room.js';
 import debounce from 'lodash.debounce'
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
+import { Reporter } from './Reporter.js';
+import { ElasticUploader } from './Elastic.js';
+
+
+let analysers: Array<Analyser> = [];
+let listenRooms: Array<Room> = [];
+let newRooms: Array<number> = [];
+let manageRoom: { [x: number]: { already: number[], hour: number } } = [];
 
 const bapi = new BiliApi({});
-let analysers: Array<Analyser> = [];
-let rooms: Array<Room> = [];
-let newRooms: Array<number> = [];
 const loginedbapi = new BiliApi({
   cookie: readFileSync("config/cookie.txt").toString(),
 });
+const reporter = new Reporter(loginedbapi);
+const elasticUploader = new ElasticUploader({
+  node: readFileSync("config/elastichost.txt").toString()
+});
+
+async function roomBadHandler(roomId, message, weight) {
+  let uid = message.info[2][0]
+  if (manageRoom[roomId] && manageRoom[roomId].already.includes(uid)) {
+    let res = await loginedbapi.banUserInRoom(roomId, message, manageRoom[roomId].hour) as any
+    if (res.code == 0) {
+      writeFile("logs/ban.log",
+        `[RoomBan] ${new Date().toLocaleTimeString()} ${roomId} ${uid} 成功 附加数据：${JSON.stringify(res.data)}`, { mode: "ap" }).then(() => { }).catch(console.error)
+      console.info("[RoomBan] ", new Date().toLocaleTimeString(), roomId, uid, `成功, 附加数据：${JSON.stringify(res.data)}`)
+      manageRoom[roomId].already.push(uid)
+    } else {
+      console.info("[RoomBan]", new Date().toLocaleTimeString(), roomId, uid, `失败 ${JSON.stringify(res)} `)
+    }
+  }
+}
 
 async function recreateAnalyser() {
   console.info("Reload Analysers")
@@ -20,6 +44,7 @@ async function recreateAnalyser() {
     let anas = JSON.parse((await readFile('config/analysers.json')).toString('utf-8'))
     anas.forEach(function (item) {
       let newAnalyser = new Analyser()
+      newAnalyser.meta = item
       if (item.matchNumber) {
         item.matchNumber.forEach(function (item) {
           newAnalyser.addNumberRule(item);
@@ -36,18 +61,9 @@ async function recreateAnalyser() {
         })
       }
       newAnalyser.addListener('bad', async function (roomid, message, weight) {
-        try {
-          let res = await loginedbapi.reportDanmu(roomid, message, item.reason) as any
-          if (res.code == 0) {
-            console.info("[Report] ", new Date().toLocaleTimeString(), roomid, message.info[2][0], `成功 ${res.data.id ? "案件号：" + res.data.id : "附加数据：" + JSON.stringify(res.data)}`)
-          } else {
-            console.info("[Report]", new Date().toLocaleTimeString(), roomid, message.info[2][0], `失败 ${JSON.stringify(res)} `)
-          }
-
-        } catch (e) {
-          console.error(e);
-        }
+        reporter.handleAnalyse(roomid, message, weight, this.meta.reason);
       })
+      newAnalyser.addListener('bad', roomBadHandler)
       newAnalysers.push(newAnalyser)
     })
   } catch (error) {
@@ -57,13 +73,14 @@ async function recreateAnalyser() {
   analysers = newAnalysers
 }
 
-recreateAnalyser()
-let debounceRecreateAnalyser = debounce(recreateAnalyser, 1000);
-
 function AddRoom(roomId) {
   let room = new Room(roomId, bapi)
   room.addListener('DANMU_MSG', function (message) {
+    elasticUploader.uploadDanmu(this.id, message)
     if (message.info[0][9] != 0) {
+      return;
+    }
+    if (message.info[0][12] == 1) {
       return;
     }
     if (message.info[4][0] > 10) {
@@ -78,52 +95,10 @@ function AddRoom(roomId) {
       }
     };
   })
+
   room.start()
-  rooms.push(room);
+  listenRooms.push(room);
 }
-
-function recreateRoomList(newRoomList: Array<number>) {
-  // let newRoomList: Array<number> = [];
-  // try {
-  //   newRoomList = JSON.parse(readFileSync('config/rooms.json', 'utf8'));
-  // } catch (error) {
-  //   console.log('Fail to Parse Room List', error)
-  //   return;
-  // }
-  let alreadyhas: Array<Room> = []
-  let needClose: Array<Room> = []
-  rooms.forEach(function (room) {
-    let i = newRoomList.indexOf(room.id);
-    if (i != -1) {
-      alreadyhas.push(room);
-      newRoomList.splice(i, 1);
-    } else {
-      needClose.push(room);
-    }
-  })
-  newRooms = newRoomList
-  if (newRoomList.length > 0) console.info("Require Connect: ", newRoomList.join(", "))
-  if (needClose.length > 0) console.info("Require Disconnect: ", needClose.map((e) => { return e.id }).join(", "))
-  needClose.forEach(function (room) {
-    room.stop()
-  })
-  rooms = alreadyhas
-}
-let debounceRecreateRoomList = debounce(recreateRoomList, 1000);
-
-// recreateRoomList()
-
-const watcher = {
-  watchRule: watchFile('config/analysers.json', () => debounceRecreateAnalyser()),
-  // watchRoom: watchFile('config/rooms.json', () => debounceRecreateRoomList())
-}
-
-const connectInterval = setInterval(() => {
-  let room = newRooms.pop()
-  if (room !== undefined) {
-    AddRoom(room)
-  }
-}, 1000)
 
 async function renewList() {
   let roomList = await Promise.all([1, 2, 3, 6, 9].map((parentAreaId) => {
@@ -146,10 +121,58 @@ async function renewList() {
   return newRooms = Object.keys(undup).map((e) => { return parseInt(e) })
 }
 
+function recreateListenRoomList(newRoomList: Array<number>) {
+  let alreadyhas: Array<Room> = []
+  let needClose: Array<Room> = []
+  listenRooms.forEach(function (room) {
+    let i = newRoomList.indexOf(room.id);
+    if (i != -1) {
+      alreadyhas.push(room);
+      newRoomList.splice(i, 1);
+    } else {
+      needClose.push(room);
+    }
+  })
+  newRooms = newRoomList
+  if (newRoomList.length > 0) console.info("Require Connect: ", newRoomList.join(", "))
+  if (needClose.length > 0) console.info("Require Disconnect: ", needClose.map((e) => { return e.id }).join(", "))
+  needClose.forEach(function (room) {
+    room.stop()
+  })
+  listenRooms = alreadyhas
+}
+
+
+function recreateManageRoomList() {
+  // let newRoomList: Array<number> = [];
+  // try {
+  //   newRoomList = JSON.parse(readFileSync('config/rooms.json', 'utf8'));
+  // } catch (error) {
+  //   console.log('Fail to Parse Room List', error)
+  //   return;
+  // }
+}
+
+const connectInterval = setInterval(() => {
+  let room = newRooms.pop()
+  if (room !== undefined) {
+    AddRoom(room)
+  }
+}, 1000)
+
+
+recreateAnalyser()
+let debounceRecreateAnalyser = debounce(recreateAnalyser, 1000);
+let debounceRecreateManageRoomList = debounce(recreateManageRoomList, 1000);
+
+const watcher = {
+  watchRule: watchFile('config/analysers.json', () => debounceRecreateAnalyser()),
+  watchRoom: watchFile('config/rooms.json', () => debounceRecreateManageRoomList())
+}
 setInterval(async () => {
-  recreateRoomList(await renewList())
+  recreateListenRoomList(await renewList())
 }, 60 * 10 * 1000);
 
 (async () => {
-  recreateRoomList(await renewList())
+  recreateListenRoomList(await renewList())
 })()

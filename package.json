@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@elastic/elasticsearch": "^8.7.0",
     "goimprotocol": "^1.0.2",
     "lodash.debounce": "^4.0.8",
     "node-fetch": "^3.3.1"
