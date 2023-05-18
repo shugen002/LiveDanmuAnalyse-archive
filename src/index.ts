@@ -1,4 +1,4 @@
-import { readFileSync, watchFile } from 'fs';
+import { existsSync, readFileSync, statSync, watchFile } from 'fs';
 import { Analyser } from './Analyser.js';
 import { BiliApi } from './BiliApi.js';
 import { Room } from './Room.js';
@@ -18,9 +18,11 @@ const loginedbapi = new BiliApi({
   cookie: readFileSync("config/cookie.txt").toString(),
 });
 const reporter = new Reporter(loginedbapi);
-const elasticUploader = new ElasticUploader({
-  node: readFileSync("config/elastichost.txt").toString()
-});
+if (existsSync("config/elastichost.txt")) {
+  const elasticUploader = new ElasticUploader({
+    node: readFileSync("config/elastichost.txt").toString()
+  });
+}
 
 async function roomBadHandler(roomId, message, weight) {
   let uid = message.info[2][0]
