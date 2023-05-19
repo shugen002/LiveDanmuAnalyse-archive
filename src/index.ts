@@ -127,7 +127,7 @@ async function renewList() {
   return newRooms = Object.keys(undup).map((e) => { return parseInt(e) })
 }
 
-function recreateListenRoomList(newRoomList: Array<number>) {
+function recreateListenRoomList(newRoomList: Array<number>, retry = 0) {
   let alreadyhas: Array<Room> = []
   let needClose: Array<Room> = []
   listenRooms.forEach(function (room) {
@@ -139,6 +139,12 @@ function recreateListenRoomList(newRoomList: Array<number>) {
       needClose.push(room);
     }
   })
+  if (newRoomList.length > 50 && retry == 0) {
+    (async () => {
+      recreateListenRoomList(await renewList())
+    })()
+    return;
+  }
   newRooms = newRoomList
   if (newRoomList.length > 0) console.info("Require Connect: ", newRoomList.join(", "))
   if (needClose.length > 0) console.info("Require Disconnect: ", needClose.map((e) => { return e.id }).join(", "))
