@@ -17,9 +17,10 @@ const bapi = new BiliApi({});
 const loginedbapi = new BiliApi({
   cookie: readFileSync("config/cookie.txt").toString(),
 });
+let elasticUploader;
 const reporter = new Reporter(loginedbapi);
 if (existsSync("config/elastichost.txt")) {
-  const elasticUploader = new ElasticUploader({
+  elasticUploader = new ElasticUploader({
     node: readFileSync("config/elastichost.txt").toString()
   });
 }
@@ -77,26 +78,29 @@ async function recreateAnalyser() {
 
 function AddRoom(roomId) {
   let room = new Room(roomId, bapi)
-  room.addListener('DANMU_MSG', function (message) {
-    elasticUploader.uploadDanmu(this.id, message)
-    if (message.info[0][9] != 0) {
-      return;
-    }
-    if (message.info[0][12] == 1) {
-      return;
-    }
-    if (message.info[4][0] > 10) {
-      return;
-    }
-    if (message.info[3] && message.info[3][0] > 10) {
-      return;
-    }
-    for (let i = 0; i < analysers.length; i++) {
-      if (analysers[i].analyse(this.id, message)) {
-        return
+  if (elasticUploader) {
+    room.addListener('DANMU_MSG', function (message) {
+      elasticUploader.uploadDanmu(this.id, message)
+      if (message.info[0][9] != 0) {
+        return;
       }
-    };
-  })
+      if (message.info[0][12] == 1) {
+        return;
+      }
+      if (message.info[4][0] > 10) {
+        return;
+      }
+      if (message.info[3] && message.info[3][0] > 10) {
+        return;
+      }
+      for (let i = 0; i < analysers.length; i++) {
+        if (analysers[i].analyse(this.id, message)) {
+          return
+        }
+      };
+    })
+  }
+
 
   room.start()
   listenRooms.push(room);
