@@ -18,14 +18,12 @@ export class Reporter {
   async handleAnalyse(roomid, message, weight, reason) {
     let uid = message.info[2][0]
     if (this.reportCounter[uid]) {
-      this.reportCounter[uid]++;
-    } else {
-      this.reportCounter[uid] = 1
+      if (Date.now() - this.reportCounter[uid] < 600000) {
+        console.info("[Report]", new Date().toLocaleTimeString(), roomid, uid, `已举报，取消`)
+        return
+      }
     }
-    if (this.reportCounter[uid] > 1) {
-      console.info("[Report]", new Date().toLocaleTimeString(), roomid, uid, `已举报，取消`)
-      return
-    }
+    this.reportCounter[uid] = Date.now()
     while (!this.reportToken.pop()) {
       await sleep(1000)
     }
